@@ -1,0 +1,239 @@
+#!/bin/python3
+
+# Things to check;
+#       That we have, at a minimum, Artist and Album in metadata for the album
+#       Directory name for Artist and Album. Does this match with id3 code
+
+import os, sys, mutagen, re
+from mutagen.id3 import ID3
+
+db  = dict()
+
+class Album:
+    def __init__(self, name):
+        self.data = {}
+        self.title = name
+
+    def listTracks(self):
+        tracks = self.data.keys()
+        returnDictionary = dict()
+        for track in tracks:
+            o = self.data[track].all()
+            returnDictionary[o['name']] = o
+        return returnDictionary
+
+    def addTrack(self, songobj):
+        trackTitle = songobj.title()
+        self.data[trackTitle] = songobj
+
+    def setArtistName(self, n):
+        self.artist = n
+
+    def name(self):
+        return self.name
+
+class Track:
+    def __init__(self, trackName, pos, file):
+        self.data = []
+        self.position = pos
+        self.name = trackName
+        self.filename = file
+
+    def title(self):
+        return self.name
+
+    def position(self):
+        return self.position
+
+    def all(self):
+        items = { 'position' : self.position, 'name' : self.name, 'filename' : self.filename }
+        return items
+
+class Artist:
+    def __init__(self, name):
+        self.data = {}
+        self.name = name
+
+    def name(self):
+        return name
+
+    def addAlbum(self, album, obj):
+        self.data[album] = obj
+
+    def listAlbums(self):
+        return self.data.keys()
+
+    def listAlbumTracks(self, album):
+        return self.data[album].listTracks()
+
+    def hasAlbum(self, album):
+        if(album in self.data.keys()):
+            return True
+        else:
+            return False
+
+class Tag:
+    def __init__(self, artist, album, title, track):
+        self.artist = artist
+        self.album  = album
+        self.title  = title
+        self.track  = track
+
+    def artist(self):
+        return artist
+    
+    def album(self):
+        return album
+
+    def title(self):
+        return title
+
+    def track(self):
+        return track
+
+
+def parseDirTree():
+    for root, dirs, files in os.walk(".", topdown=True):
+        for name in files:
+            m = re.search('^(\d+)\.(.+)\.(ogg|mp3)$', name)
+            filePath = root + "/" + name
+            if (m != None):
+                l        = root.split("/")
+                group    = unsanitize(l[1])
+                album    = unsanitize(l[2])
+
+                # If it's a new artist, create a new artist object and add it to the "artists" dictionary
+                if (group not in db.keys()):
+                    artist = Artist(group)
+                    db[artist.name] = artist
+
+                # If it's a new album create a new album object and add to the artists' collection.
+                if (not db[artist.name].hasAlbum(album)):
+                    albumobj = Album(album)
+                    albumobj.setArtistName(group)
+                    db[group].addAlbum(album, albumobj)
+        
+                # Then I guess it's a new song
+                title    = unsanitize(m[2])
+                position = unsanitize(m[1])
+                songobj  = Track(title, position, filePath)
+        
+                # and finally add the song object as a track to the album
+                albumobj.addTrack(songobj)
+            else:
+                Warning("error: parseDirTree: Failed parsing filename - " + str(filePath))
+
+
+class SongTag:
+    def __init__(self, artist, album, position, title, fileExt):
+        self.artist   = artist
+        self.album    = album
+        self.position = position
+        self.title    = title
+        self.fileEx   = fileExt
+
+    def getAlbum(self):
+        return self.album
+
+    def getTitle(self):
+        return self.title
+
+    def getPosition(self):
+        return self.position
+
+    def getArtist(self):
+        return self.artist
+
+    def getExt(self):
+        return self.fileExt
+
+
+def getTag(file):
+    # pull out tag information from ogg and mp3 files and return a SongTag object
+    (artist, album, title, tracknumber) = ('', '', '', '')
+    try:
+        if (file.endswith(".ogg")):
+            j = mutagen.File(file)
+            ext = '.ogg'
+            if ("artist" in j):
+                artist = str(j["artist"][0])
+            if ("album" in j):
+                album = str(j["album"][0])
+            if ("title" in j):
+                title = str(j["title"][0])
+            if ("tracknumber" in j):
+                track = str(j["tracknumber"][0])
+        elif (file.endswith(".mp3")):
+            j = mutagen.File(file)
+            ext = '.mp3'
+            if ("TPE1" in j):
+                artist = str(j["TPE1"])
+            if ("TALB" in j):
+                album = str(j["TALB"])
+            if ("TIT2" in j):
+                title = str(j["TIT2"])
+            if ("TRCK" in j):
+                track = (str(j["TRCK"]).split("/"))[0]
+    except OSError as err:
+        print("OS error: {0}".format(err))
+    except Exception as e:
+        print("error: Unable to access " + file)
+        return file
+
+    else:
+        return SongTag(artist, album, track, title, ext)
+
+def Warning(msg):
+    print("warning:", msg)
+
+def analyse():
+    # Things to check;
+    #       That we have, at a minimum; Artist and Album in metadata for the album
+    #       Directory name for Artist and Album. Does this match with id3 code
+
+    for artist in db.keys():
+        for album in db[artist].listAlbums():
+            songList = db[artist].listAlbumTracks(album)
+            for song in songList:
+                try:
+                    tagobj = getTag(songList[song]['filename'])
+                    FileLocation = songList[song]['filename']
+
+                    # Check that Artist matches up by comparing Artist/Album directory and mp3/ogg
+                    # metadata and checking that it matches up.
+
+                    if(tagobj.getArtist() != artist):
+                         print("warning: artist '" + artist + "' (Name from Directory) and '" + tagobj.getArtist() + "' (Name from ID3 tag) do not match for file", FileLocation)
+               
+                    if(tagobj.getAlbum() != album):
+                        print("warning: album '" + album + "' (Name from Directory) and '" + tagobj.getAlbum() + "' (Name from ID3 tag) does not match for file", FileLocation)
+                 
+                    if(tagobj.getTitle() != song):
+                        print("warning: song '" + song + "' (name from File) and '" + tagobj.getTitle() +  "' (Name from ID3 tag) do not match for file", FileLocation)
+                except:
+                   Warning("Ignoring file " + str(songList[song]['filename']))
+                   #print("e is", e)
+
+
+def run():
+    srcDir = "Music/"
+    try:
+        os.chdir(srcDir)
+        parseDirTree()
+        analyse()
+    except OSError as err:
+        print("error: {0}".format(err))
+
+def unsanitize(t):
+    # Some characters get replaced in file and directory names because
+    # that makes them easier to deal with.
+    a = t.replace("_", " ")
+    b = a.replace("^", "/")
+    return b
+
+if __name__ == "__main__":
+    try:
+        run()
+    except (KeyboardInterrupt, EOFError):
+        print("\nExiting...")
+

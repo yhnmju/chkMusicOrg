@@ -1,0 +1,5 @@
+
+Validate my music collection; check filename sync with music file metadata (ie id3)
+#Things to check;
+#       That we have, at a minimum, Artist and Album in metadata for the album
+#       Directory name for Artist and Album. Does this match with id3 code
