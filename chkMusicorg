@@ -177,7 +177,7 @@ def getTag(file):
     except OSError as err:
         print("OS error: {0}".format(err))
     except Exception as e:
-        print("error: Unable to access " + file)
+        print("error: Unable to access " + file, e)
         return file
 
     else:
@@ -212,8 +212,6 @@ def analyse():
                         print("warning: song '" + song + "' (name from File) and '" + tagobj.getTitle() +  "' (Name from ID3 tag) do not match for file", FileLocation)
                 except:
                    Warning("Ignoring file " + str(songList[song]['filename']))
-                   #print("e is", e)
-
 
 def run():
     srcDir = "Music/"
